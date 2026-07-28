@@ -1,0 +1,14 @@
+# NodePort exposes ONLY the tokened heartbeat endpoint. Deliberately no
+# LoadBalancer: all monitoring traffic is outbound; this saves $12/mo and
+# shrinks the attack surface to one authenticated endpoint.
+apiVersion: v1
+kind: Service
+metadata:
+  name: guardian-sentinel
+spec:
+  type: NodePort
+  selector: { app: guardian-sentinel }
+  ports:
+    - port: 8080
+      targetPort: 8080
+      nodePort: 30080

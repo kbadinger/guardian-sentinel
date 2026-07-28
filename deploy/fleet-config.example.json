@@ -1,0 +1,17 @@
+{
+  "instance": "fleet",
+  "interval": "60s",
+  "probe_timeout": "10s",
+  "fail_threshold": 3,
+  "realert_cooldown": "6h",
+  "probes": [
+    { "name": "thisweekeats", "type": "http", "url": "https://thisweekeats.com/", "expect": "VERIFY_MARKER", "warn_cert_days": 14 },
+    { "name": "penforge", "type": "http", "url": "https://app.penforge.io/", "expect": "VERIFY_MARKER", "warn_cert_days": 14 },
+    { "name": "drift", "type": "http", "url": "https://driftnightly.com/", "expect": "VERIFY_MARKER", "warn_cert_days": 14 },
+    { "name": "kevinbadinger", "type": "http", "url": "https://kevinbadinger.com/", "expect": "VERIFY_MARKER", "warn_cert_days": 14 },
+    { "name": "readreceipt", "type": "http", "url": "https://CONFIRM_URL/", "expect": "VERIFY_MARKER", "warn_cert_days": 14 },
+    { "name": "erail-tracktrace", "type": "http", "url": "https://CONFIRM_URL/", "expect": "VERIFY_MARKER", "warn_cert_days": 14 },
+    { "name": "qtown-v1", "type": "http", "url": "https://v1.qtown.ai/", "expect": "VERIFY_MARKER", "warn_cert_days": 14 },
+    { "name": "velma-alive", "type": "heartbeat", "listen": ":8080", "token_env": "SENTINEL_HEARTBEAT_TOKEN", "max_silence": "15m", "peer_name": "velma (Guardian host)" }
+  ]
+}

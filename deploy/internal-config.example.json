@@ -1,0 +1,14 @@
+{
+  "instance": "internal",
+  "interval": "60s",
+  "probe_timeout": "10s",
+  "fail_threshold": 3,
+  "realert_cooldown": "6h",
+  "probes": [
+    { "name": "api", "type": "http", "url": "http://127.0.0.1:8002/health", "expect": "\"status\":\"healthy\"" },
+    { "name": "web", "type": "http", "url": "http://127.0.0.1:3100/", "expect": "VERIFY_REAL_MARKER_AT_DEPLOY" },
+    { "name": "mcp", "type": "mcp", "url": "http://127.0.0.1:8765/mcp", "token_env": "SENTINEL_MCP_TOKEN" },
+    { "name": "backup", "type": "backup", "dir": "/Users/velma/projects/guardian/backups", "glob": "guardian-*", "file": "guardian.db.gz", "max_age": "26h" },
+    { "name": "cloud-peer", "type": "heartbeat_send", "url": "http://DOKS_NODE_PUBLIC_IP:30080/heartbeat", "token_env": "SENTINEL_HEARTBEAT_TOKEN", "interval": "5m", "fail_threshold": 3 }
+  ]
+}

@@ -1,0 +1,33 @@
+# Fleet instance on DOKS. Image path filled in at M7 (DO registry).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: guardian-sentinel
+  labels: { app: guardian-sentinel }
+spec:
+  replicas: 1   # a prober; >1 would double-page
+  selector:
+    matchLabels: { app: guardian-sentinel }
+  template:
+    metadata:
+      labels: { app: guardian-sentinel }
+    spec:
+      containers:
+        - name: sentinel
+          image: registry.digitalocean.com/REGISTRY_NAME/guardian-sentinel:v1
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: SENTINEL_CONFIG
+              value: /etc/sentinel/fleet-config.json
+          envFrom:
+            - secretRef: { name: sentinel-secrets }
+          ports:
+            - containerPort: 8080   # heartbeat receiver only
+          volumeMounts:
+            - { name: config, mountPath: /etc/sentinel, readOnly: true }
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits:   { cpu: 200m, memory: 128Mi }
+      volumes:
+        - name: config
+          configMap: { name: sentinel-config }

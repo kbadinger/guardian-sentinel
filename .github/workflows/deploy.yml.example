@@ -1,0 +1,29 @@
+# Rename to deploy.yml at M7, after the DOKS cluster + registry exist and the
+# repo secrets (DO_REGISTRY, DO_KUBECONFIG_B64, DO_API_TOKEN) are configured.
+name: deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build-push-rollout:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build linux/amd64 static binary
+        run: CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o bin/guardian-sentinel ./cmd/guardian-sentinel
+      - name: Build and push image
+        run: |
+          echo "${{ secrets.DO_API_TOKEN }}" | docker login registry.digitalocean.com -u unused --password-stdin
+          docker build -t registry.digitalocean.com/${{ secrets.DO_REGISTRY }}/guardian-sentinel:${{ github.sha }} .
+          docker push registry.digitalocean.com/${{ secrets.DO_REGISTRY }}/guardian-sentinel:${{ github.sha }}
+      - name: Rolling update
+        run: |
+          echo "${{ secrets.DO_KUBECONFIG_B64 }}" | base64 -d > kubeconfig
+          KUBECONFIG=./kubeconfig kubectl set image deployment/guardian-sentinel \
+            sentinel=registry.digitalocean.com/${{ secrets.DO_REGISTRY }}/guardian-sentinel:${{ github.sha }}
+          KUBECONFIG=./kubeconfig kubectl rollout status deployment/guardian-sentinel --timeout=120s

@@ -1,14 +1,21 @@
 # guardian-sentinel
 
-A small, dependency-free Go daemon that watches my self-hosted AI memory system
-([Guardian](https://github.com/kbadinger)) from the inside: every minute it
-probes the API, web UI, MCP server, and nightly-backup freshness on the box they
-run on, and sends me a Telegram alert on failure — and a recovery notice when
-things come back.
+One small, dependency-free Go monitoring service, deployed twice:
 
-**Status: spec complete, build not started.** The full build spec — probes,
-state machine, config, testing, deployment, milestones — is in [SPEC.md](SPEC.md).
+- **On the box** (a Mac mini under launchd): watches my self-hosted AI memory
+  system from the inside — API, web UI, MCP server, nightly-backup freshness.
+- **In the cloud** (a 1-node DigitalOcean Kubernetes cluster): watches every
+  live site I've shipped from the real internet — content checks, cert-expiry
+  warnings — deployed via a registry + CI/CD rolling-update pipeline.
 
-- Go stdlib only, zero third-party dependencies
-- Single static binary, runs 24/7 under launchd on an always-on Mac mini
-- Read-only by design: it observes, it never touches the system it watches
+The two instances cover each other with a **dead-man's switch**: the on-prem
+instance heartbeats the cloud one, so "the whole box is down" — the one failure
+no on-box watcher can report — still pages my phone. All alerts via Telegram.
+
+**Status: spec complete (v2), build not started.** The full build spec — probe
+types, config schema, state machine, testing, both deployments, milestones — is
+in [SPEC.md](SPEC.md).
+
+- Go stdlib only, zero third-party dependencies; single static binary
+- Config-driven probes (JSON): same binary, different config per deployment
+- Read-only by design: it observes, it never touches what it watches

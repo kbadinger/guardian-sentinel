@@ -1,229 +1,236 @@
-# guardian-sentinel — Build Spec v1
+# guardian-sentinel — Build Spec v2
 
-**One-liner:** a small Go daemon that runs 24/7 on velma (the always-on Mac mini),
-probes Guardian's real surfaces every minute, and sends a Telegram alert when
-something goes down — and a recovery notice when it comes back.
+**One-liner:** one small Go monitoring service, deployed twice: on velma (launchd)
+watching Guardian's internals from inside, and on a $12/mo DigitalOcean Kubernetes
+cluster watching every live site Kevin has shipped from the real internet — the two
+instances covering each other with a dead-man's switch, all alerts to Telegram.
 
-**Why it exists:** (a) real operational value — Guardian had a backup/corruption
-incident in July 2026 and its watchers have no watcher; (b) it is the vehicle for
-learning Go by shipping production software (Guardian task `9c4f6f61`, project
-`career`). The resume claim this build must make true: *"Go service running in
-production since July 2026."* Nothing more ("expert Go" is NOT claimed).
+**Why it exists:** (a) real operational value — today NOTHING monitors Kevin's
+public products (ThisWeekEats, PenForge, driftnightly, kevinbadinger.com,
+ReadReceipt, eRail, qtown), Guardian's watchers have no watcher, and no design
+except an off-box monitor can catch "velma itself is down"; (b) it is the vehicle
+for two job-search skill gaps at once — **Go** (Guardian task `9c4f6f61`) and
+**Kubernetes in production** (the claims-ladder rung from the K8s plan) — closed
+by one artifact that does a genuine job. Decided with Kevin 2026-07-28.
 
-**Time budget:** ~8 hours total. Scope is ruthless; anything not listed under
-Milestones is out (see Non-goals).
+**The resume claims this build makes true (and nothing more):**
+- "I wrote a Go monitoring service and run it in production on managed Kubernetes
+  (DigitalOcean) — container registry, CI/CD deploys, rolling updates."
+- "It monitors my whole product portfolio and pages my phone; the on-prem and
+  cloud instances watch each other with a dead-man's switch."
+- Never claim: "enterprise scale", multi-cluster, service mesh, "expert Go".
+
+**Time budget:** ~12 hours total, structured so the first 8 (velma v1) stand alone.
 
 ---
 
+## Architecture — one binary, config-driven, two deployments
+
+```
+                    ┌──────────────────────────────────────────┐
+                    │  DOKS (1× $12/mo node, linux/amd64)      │
+   internet ──────► │  sentinel --config fleet.json            │──► Telegram
+   (probes out)     │  probes: public sites + cert expiry      │
+                    │  heartbeat RECEIVER (NodePort + token)   │
+                    └────────────────▲─────────────────────────┘
+                                     │ heartbeat POST every 5 min
+                    ┌────────────────┴─────────────────────────┐
+                    │  velma (launchd, darwin/arm64)           │
+                    │  sentinel --config internal.json         │──► Telegram
+                    │  probes: API/web/MCP/backup freshness    │
+                    └──────────────────────────────────────────┘
+```
+
+- **Same binary, same repo.** Behavior differs only by config file. No forked code.
+- **Dead-man's switch, both directions:** the velma instance POSTs a heartbeat to
+  the DOKS instance; if heartbeats go silent past a threshold, DOKS alerts
+  "velma is down" — the one failure no on-box watcher can report. Symmetrically,
+  if velma's heartbeat POSTs fail repeatedly, velma alerts "cloud monitor
+  unreachable". Neither side needs inbound access to the other's network beyond
+  one tokened NodePort endpoint on the DOKS node.
+- **Read-only stance everywhere:** probes observe, never mutate, never restart
+  anything. Only side effects: Telegram messages, heartbeats, its own logs.
+- **Guardian itself never moves to Kubernetes.** launchd is correct for it, and
+  saying so is itself a good interview answer.
+
 ## Hard constraints
 
-1. **Stdlib only. Zero third-party dependencies.** Telegram is a plain HTTPS POST;
-   probes are `net/http` + `os` stat calls. This is idiomatic for a tool this size,
-   removes all supply-chain risk, and is a deliberate portfolio flex.
-2. **Read-only prober.** Sentinel never writes to Guardian's DB, API, or files.
-   Its only side effect is Telegram messages (and its own log).
-3. **Config via environment variables only.** No config files, no flags (except
-   `-version` and `-dry-run` if convenient). Secrets live in
-   `~/.guardian-sentinel.env` on velma (gitignored pattern), loaded by the launchd
-   wrapper script — never committed anywhere, never baked into the plist.
-4. **Single static binary**, built for `darwin/arm64` (velma is an arm64 Mac on
-   macOS 26.3 — verified 2026-07-28). The laptop is also darwin/arm64, so a
-   laptop-built binary runs on velma unmodified.
-5. **Public repo.** No personal data in code, comments, tests, or fixtures. The
-   Tailscale IP and paths in this spec are fine as *defaults documented in
-   README/env.example* (they're private-network addresses), but tokens never.
+1. **Stdlib only — zero third-party Go dependencies.** JSON config via
+   `encoding/json` (this is why config is JSON, not YAML — stdlib has no YAML).
+   Telegram via `net/http`. Cert expiry via `crypto/tls` connection state.
+2. **Config file declares probes; env carries secrets.** `SENTINEL_CONFIG` env →
+   path to a JSON file (plain file on velma, ConfigMap in k8s). Secrets
+   (Telegram token, MCP bearer, heartbeat token) come ONLY from env (launchd env
+   file on velma, k8s Secret on DOKS) and are referenced from config by env-var
+   NAME, never by value. No secret ever appears in a config file, image, or repo.
+3. **Single static binary.** Build matrix: `darwin/arm64` (velma) and
+   `linux/amd64` (DOKS node). `CGO_ENABLED=0`.
+4. **Public repo** (`github.com/kbadinger/guardian-sentinel`). No personal data;
+   private-network defaults documented in examples are fine, tokens never.
 
-## Architecture & layout
+## Probe types
 
-```
-cmd/guardian-sentinel/main.go   — flag/env parsing, wiring, run loop entry
-internal/probe/probe.go         — Probe interface + Result type
-internal/probe/httpprobe.go     — generic HTTP probe (status + body substring)
-internal/probe/mcpprobe.go      — MCP JSON-RPC initialize handshake probe
-internal/probe/backupprobe.go   — backup-freshness probe (filesystem)
-internal/monitor/monitor.go     — scheduler + per-probe state machine
-internal/alert/telegram.go      — Telegram sendMessage alerter (+ dry-run)
-deploy/                         — launchd plist, wrapper script, env example
-```
+| type | config fields | success criteria |
+|------|--------------|------------------|
+| `http` | `url`, `expect` (body substring), `warn_cert_days` (optional, default 14), `timeout` | status 200 AND body contains `expect`; if HTTPS and cert expires within `warn_cert_days`, emit a WARN alert (does not mark DOWN). Per Kevin's rule, `expect` is REQUIRED — a bare 200 is never proof the right app answered. |
+| `mcp` | `url`, `token_env`, `expect` (default `guardian-memory`) | JSON-RPC `initialize` handshake (headers: Authorization from `token_env`, `Content-Type: application/json`, `Accept: application/json, text/event-stream`); response body contains `expect`. Exact probe the proven `guardian-health-check.sh` hook uses; catches up-but-dropping-responses (the 2026-07-23 MCP incident), which a port check can't. |
+| `backup` | `dir`, `glob` (e.g. `guardian-*`), `file` (e.g. `guardian.db.gz`), `max_age` | newest matching subdir contains `file` with mtime < `max_age`. Watchman-for-the-watchman: the existing 04:00 restore-verify alerts when a restore FAILS; nothing alerts when backup jobs silently stop RUNNING. |
+| `heartbeat` (receiver) | `listen` (`:8080`), `token_env`, `max_silence` (e.g. `15m`), `peer_name` | runs a tiny `net/http` handler; a valid tokened POST resets the timer; silence past `max_silence` → DOWN alert "`peer_name` is down"; next valid POST → RECOVERY. |
+| `heartbeat_send` | `url`, `token_env`, `interval` (e.g. `5m`), `fail_threshold` | POSTs to the receiver; `fail_threshold` consecutive send failures → WARN "cloud monitor unreachable" (WARN not DOWN — the sites may be fine). |
 
-`Probe` interface (shape, adjust as idiomatic):
+## Verified facts baked into the configs (all verified 2026-07-28)
 
-```go
-type Result struct {
-    OK      bool
-    Detail  string        // human line for the alert message
-    Latency time.Duration
-}
+**Internal config (velma — probes hit localhost, deliberately independent of Tailscale):**
+1. API — GET `http://127.0.0.1:8002/health`, expect `"status":"healthy"`
+   (`backend/api/routes/health.py`, no `/api` prefix, returns 503 when unhealthy).
+2. Web — GET `http://127.0.0.1:3100/`, expect marker (🔴 builder curls the live
+   page at deploy and picks a real marker string).
+3. MCP — `http://127.0.0.1:8765/mcp` handshake as above.
+4. Backup — dir `/Users/velma/projects/guardian/backups`, glob `guardian-*`,
+   file `guardian.db.gz`, max_age `26h`. Verified layout: nightly 03:30 job
+   writes `guardian-<YYYYMMDD-HHMMSS>/guardian.db.gz`; NOTE `~/guardian-backups`
+   is a DIFFERENT dir (old worktree tarballs) — wrong target.
+5. heartbeat_send → DOKS node, every 5m.
 
-type Probe interface {
-    Name() string
-    Check(ctx context.Context) Result
-}
-```
+**Fleet config (DOKS):** one `http` probe per live surface — thisweekeats.com,
+app.penforge.io, driftnightly.com, kevinbadinger.com, ReadReceipt (🔴 confirm
+URL), eRail TrackTrace (🔴 confirm URL — runs on DigitalOcean), v1.qtown.ai —
+each with a real content marker (🔴 verify each at build time) and cert-expiry
+warnings; plus the `heartbeat` receiver watching velma. Growth = append a JSON
+object; no code change.
 
-## The four probes (all facts below verified on 2026-07-28)
+## Monitor loop & state machine (unchanged from v1 except config-driven)
 
-Sentinel runs ON velma, so all probes hit localhost — deliberately independent of
-Tailscale, which is its own failure domain.
-
-| # | Name     | Method | Success criteria |
-|---|----------|--------|------------------|
-| 1 | `api`    | GET `http://127.0.0.1:8002/health` | HTTP 200 **and** body contains `"status":"healthy"`. The endpoint exists in `backend/api/routes/health.py`, mounted without the `/api` prefix; it returns 503 when a critical service is down — treat non-200 as DOWN with the body's detail. |
-| 2 | `web`    | GET `http://127.0.0.1:3100/` | HTTP 200 **and** body contains `SENTINEL_WEB_EXPECT` (default `Guardian`). 🔴 Builder: curl the live page once at deploy time and pick a marker string actually present — per Kevin's rule, a 200 alone is NOT proof the right app answered. |
-| 3 | `mcp`    | POST `http://127.0.0.1:8765/mcp` — JSON-RPC `initialize` handshake, headers `Authorization: <SENTINEL_MCP_TOKEN>`, `Content-Type: application/json`, `Accept: application/json, text/event-stream`. Body: `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"guardian-sentinel","version":"<ver>"}}}` | Response body contains `guardian-memory`. This is the exact probe the proven `guardian-health-check.sh` hook uses (response may be SSE-framed — substring match, don't parse). A real handshake matters: the 2026-07-23 incident was the MCP being up-but-dropping-responses, which a TCP/port check would miss. |
-| 4 | `backup` | Filesystem stat under `SENTINEL_BACKUP_DIR` (default `/Users/velma/projects/guardian/backups`) | The newest `guardian-*` subdirectory contains `guardian.db.gz` with mtime < `SENTINEL_BACKUP_MAX_AGE` (default 26h). Verified layout: nightly launchd job (03:30) writes `guardian-<YYYYMMDD-HHMMSS>/guardian.db.gz`; last night's snapshot confirmed present. NOTE: `~/guardian-backups` is a DIFFERENT directory (old worktree tarballs) — do not point there. |
-
-**Why probe 4 despite the existing 04:00 backup-verify job:** that job alerts when
-a restore-test *fails*, but nothing alerts when the backup or verify jobs silently
-*stop running*. Freshness-of-artifact is the watchman-for-the-watchman. Do not
-duplicate the restore-verify logic.
-
-## Monitor loop & state machine
-
-- Tick every `SENTINEL_INTERVAL` (default 60s). Each tick runs all probes
+- Tick every `interval` (default 60s, per-config override); probes run
   concurrently (goroutine per probe, `sync.WaitGroup`), each with its own
-  `context.WithTimeout` of `SENTINEL_PROBE_TIMEOUT` (default 10s).
-- Per-probe state: consecutive-failure counter.
-  - UP → DOWN when failures reach `SENTINEL_FAIL_THRESHOLD` (default 3
-    consecutive) → send DOWN alert. Threshold exists so a single timeout blip
-    doesn't page.
-  - While DOWN: re-alert every `SENTINEL_REALERT_COOLDOWN` (default 6h), not
-    every tick.
-  - DOWN → UP on first success → send RECOVERY alert (include outage duration).
-- On startup: run one probe round; send a single startup summary message
-  ("sentinel online — api ✓ web ✓ mcp ✓ backup ✓") so a dead sentinel is itself
-  noticeable by silence, and log to stdout (launchd captures to file).
-- The state machine lives in `internal/monitor` with NO real I/O — it takes probe
-  results in and returns "alerts to send" out. This is where the table-driven
-  tests earn their keep.
+  `context.WithTimeout` (default 10s).
+- Per-probe consecutive-failure counter. UP→DOWN at `fail_threshold` (default 3)
+  → DOWN alert. While DOWN: re-alert every `realert_cooldown` (default 6h).
+  DOWN→UP on first success → RECOVERY alert with outage duration. WARN-class
+  events (cert expiry, heartbeat-send failures) alert once per cooldown, never
+  mark DOWN.
+- Startup: one probe round + a single summary message ("sentinel[fleet] online —
+  7/7 ✓"), so a dead sentinel is noticeable by silence.
+- State machine lives in `internal/monitor` with NO real I/O — probe results in,
+  "alerts to send" out. Centerpiece of the table-driven tests.
 
-## Alerting (Telegram)
+## Alerting
 
-- `POST https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/sendMessage` with
-  `chat_id=TELEGRAM_CHAT_ID`, plain text. Reuses Guardian's existing bot; the
-  chat id is Kevin's Telegram user id (same value as Guardian's
-  `TELEGRAM_ALLOWED_USER_ID` on velma).
-- Message format (keep it plain, one glance):
-  - `🚨 guardian-sentinel: API DOWN — 3 consecutive failures. Last error: connection refused (probe latency 10s timeout). 11:42 ET`
-  - `✅ guardian-sentinel: API RECOVERED after 14m. 11:56 ET`
-- Send failures: log and carry on (never crash the loop because Telegram is down).
-- `SENTINEL_DRY_RUN=1` prints messages to stdout instead of sending — used in
-  development and in the live-fire rehearsal.
+Telegram `sendMessage` via HTTPS POST, reusing Guardian's existing bot
+(`TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` — chat id = Kevin's user id, same
+value as Guardian's `TELEGRAM_ALLOWED_USER_ID`). Messages are plain text, one
+glance: `🚨 sentinel[fleet]: thisweekeats.com DOWN — 3 consecutive failures
+(connection refused). 12:41 ET` / `✅ sentinel[fleet]: thisweekeats.com RECOVERED
+after 14m` / `⚠️ sentinel[fleet]: cert for driftnightly.com expires in 9 days`.
+Send failures: log and continue — never crash the loop. `SENTINEL_DRY_RUN=1`
+prints instead of sending.
 
-## Configuration (env vars, all with defaults except secrets)
+## Repo layout
 
-| Var | Default | Notes |
-|-----|---------|-------|
-| `SENTINEL_INTERVAL` | `60s` | Go duration syntax |
-| `SENTINEL_PROBE_TIMEOUT` | `10s` | per probe per tick |
-| `SENTINEL_FAIL_THRESHOLD` | `3` | consecutive failures → DOWN |
-| `SENTINEL_REALERT_COOLDOWN` | `6h` | re-page cadence while DOWN |
-| `SENTINEL_API_URL` | `http://127.0.0.1:8002/health` | |
-| `SENTINEL_WEB_URL` | `http://127.0.0.1:3100/` | |
-| `SENTINEL_WEB_EXPECT` | `Guardian` | 🔴 verify real marker at deploy |
-| `SENTINEL_MCP_URL` | `http://127.0.0.1:8765/mcp` | |
-| `SENTINEL_MCP_TOKEN` | — (secret) | full `Bearer <token>` header value |
-| `SENTINEL_BACKUP_DIR` | `/Users/velma/projects/guardian/backups` | verified path |
-| `SENTINEL_BACKUP_MAX_AGE` | `26h` | nightly 03:30 + slack |
-| `TELEGRAM_BOT_TOKEN` | — (secret) | reuse Guardian's bot |
-| `TELEGRAM_CHAT_ID` | — (secret-ish) | Kevin's Telegram user id |
-| `SENTINEL_DRY_RUN` | unset | `1` = print, don't send |
+```
+cmd/guardian-sentinel/main.go     — config load, wiring, run loop
+internal/config/config.go         — JSON schema, validation (unknown type = error)
+internal/probe/{probe,http,mcp,backup,heartbeat}.go
+internal/monitor/monitor.go       — scheduler + state machine (pure logic)
+internal/alert/telegram.go
+deploy/                           — launchd plist, wrapper, env example (velma)
+deploy/k8s/                       — Deployment/Service/ConfigMap/Secret templates (DOKS)
+deploy/internal-config.example.json
+deploy/fleet-config.example.json
+.github/workflows/ci.yml          — fmt/vet/test -race/staticcheck
+.github/workflows/deploy.yml.example — build → DO registry → rollout (enable at M7)
+```
 
 ## Testing (table-driven, no network)
 
-- `internal/monitor`: the centerpiece. Table-driven tests covering: blip below
-  threshold (no alert), threshold crossing (one DOWN alert), continued failure
-  inside cooldown (no re-alert), past cooldown (re-alert), recovery (RECOVERY
-  alert + counter reset), multiple probes independent.
-- `internal/probe`: `httptest.NewServer` for api/web/mcp probes (status codes,
-  body markers, timeout via a hanging handler); `t.TempDir()` fixtures for the
-  backup probe (fresh dir, stale dir, empty dir, wrong-layout dir).
-- `internal/alert`: dry-run path + a `httptest` Telegram endpoint asserting the
-  outgoing request shape.
-- `go test -race ./...` must pass. No test touches the real network, velma, or
-  real Telegram.
+Everything from v1 (monitor state machine: blip/threshold/cooldown/re-alert/
+recovery/independence; probes via `httptest` + `t.TempDir()`; alerter against a
+fake Telegram endpoint) PLUS: config parsing (valid, unknown probe type, missing
+required field, secret-by-env-name resolution), heartbeat receiver state machine
+(fresh → silent → alert → resume), cert-expiry evaluation against a locally
+generated short-lived test cert. `go test -race ./...` required. No test touches
+the real network, velma, DO, or Telegram.
 
-## CI (GitHub Actions)
+## CI / CD
 
-`.github/workflows/ci.yml` (scaffolded in this repo): `gofmt -l` clean,
-`go vet`, `go test -race ./...`, `staticcheck ./...`. Actions pinned to
-long-established major tags (`actions/checkout@v4`, `actions/setup-go@v5`);
-staticcheck pinned to `2025.1.1` — 🔴 builder: verify that version is ≥7 days old
-and supports the Go toolchain in use (house supply-chain rule), bump the pin if not.
+- **CI (from M0):** gofmt clean, `go vet`, `go test -race`, staticcheck (pinned
+  `2025.1.1` — 🔴 verify ≥7 days old + toolchain support per house supply-chain
+  rule). Actions pinned to long-established tags (`actions/checkout@v4`,
+  `actions/setup-go@v5`).
+- **CD (at M7):** GitHub Action on push to main — `docker build` (multi-stage,
+  `FROM scratch` + ca-certificates for the final image), push to the DO container
+  registry (included with DOKS), `kubectl set image` with a scoped kubeconfig
+  stored as an encrypted repo secret → rolling update, `kubectl rollout status`
+  gate. This pipeline IS the resume line — keep it boring and standard.
 
-## Deployment (velma, launchd)
+## Deployment A — velma (launchd, internal mode)
 
-Velma has NO Go installed (verified 2026-07-28). Two options; prefer A for
-matching the house git-based deploy discipline:
+Unchanged from v1: velma has no Go (verified) → `brew install go` (mature
+package), clone to `/Users/velma/projects/guardian-sentinel`, build, env file
+`~/.guardian-sentinel.env` (chmod 600) from `deploy/guardian-sentinel.env.example`,
+install `deploy/com.local.guardian-sentinel.plist` (KeepAlive, logs to
+`~/Library/Logs/guardian-sentinel.log`). Fallback: laptop build + scp (same
+darwin/arm64). **Live-fire acceptance:** stop guardian-web, see DOWN on Telegram
+within ~3 intervals, restart, see RECOVERY (screenshot → README). Web is the safe
+victim — never live-fire API or MCP (agents may be mid-write). 🔴 Kevin approves
+the ~2-min window.
 
-- **A (preferred):** `ssh velma 'brew install go'` (mature package — fine under
-  the 7-day rule), clone the repo to `/Users/velma/projects/guardian-sentinel`
-  (sibling of the live guardian checkout at `/Users/velma/projects/guardian`),
-  `go build -o ~/bin/guardian-sentinel ./cmd/guardian-sentinel`.
-- **B (fallback):** build on the laptop (same darwin/arm64) and `scp` the binary.
+## Deployment B — DOKS (fleet mode)
 
-Then:
-1. Create `~/.guardian-sentinel.env` on velma from
-   `deploy/guardian-sentinel.env.example` (secrets: MCP token from velma's
-   Guardian env, Telegram token/chat-id from the existing Telegram runner's env).
-   `chmod 600`.
-2. Install `deploy/com.local.guardian-sentinel.plist` →
-   `~/Library/LaunchAgents/`, which runs `deploy/start-guardian-sentinel.sh`
-   (sources the env file, execs the binary). `launchctl bootstrap gui/$(id -u) …`.
-   KeepAlive=true, logs to `~/Library/Logs/guardian-sentinel.log`.
-3. **Live-fire acceptance test (required):** stop the web service
-   (`launchctl bootout` the guardian-web agent or equivalent kickstart trick),
-   watch the DOWN alert arrive on Telegram within ~3 intervals, restart it, watch
-   the RECOVERY alert. Screenshot goes in the README. Do this at a moment Kevin
-   is aware — it briefly takes the web UI down. Do NOT live-fire against the API
-   or MCP (other agents may be mid-write); web is the safe victim.
+1. **Cluster:** DO console (or `doctl`) → Kubernetes → 1 node pool × 1 Basic
+   node ($12/mo; control plane free — verified in the 2026-07-23 K8s plan).
+   🔴 Confirm the eRail DigitalOcean account takes the billing.
+2. **Registry:** DO Container Registry (included) — `doctl registry login`,
+   tag + push `guardian-sentinel:v1` (linux/amd64).
+3. **Manifests** (`deploy/k8s/`): Deployment (1 replica, requests 50m/64Mi,
+   limits 200m/128Mi — it's a tiny prober), ConfigMap from
+   `fleet-config.example.json`, Secret (Telegram token/chat id + heartbeat
+   token), Service `type: NodePort` exposing ONLY the heartbeat port on the
+   node's public IP. **No LoadBalancer** — probes are outbound; skipping the LB
+   saves $12/mo and shrinks attack surface to one tokened endpoint.
+4. **Liveness:** k8s restarts the pod on hang (its own liveness probe = the
+   process's health); cluster-wide death is covered by "Telegram went quiet" +
+   velma's heartbeat-send WARN. Accepted residual risk, documented.
+5. **Kill switch:** delete cluster + registry; total exposure $12/mo while alive.
 
-## Optional stretch (NOT in the 8h; only if Kevin wants the K8s literacy signal)
-
-`deploy/k8s/` with a plain Deployment + Secret + Kustomize overlay for the
-sentinel container (plus a minimal Dockerfile), validated in CI with kubeconform
-— **no cluster anywhere**. This demonstrates current K8s fluency in a public
-repo. It deliberately does NOT claim "Kubernetes at production scale" — that
-claim only comes from real work history, and a hobby manifest must never be
-dressed up as it.
-
-## Non-goals (v1)
-
-No Prometheus/metrics endpoint, no web dashboard, no config file, no multi-host
-support, no probing of Tailscale reachability, no restarting/self-healing of
-Guardian services (read-only rule), no rewrite of any existing backup/verify
-logic, no third-party Go modules.
-
-## Milestones (~8h)
+## Milestones (~12h; M0–M5 = the standalone 8h velma v1)
 
 | # | Time | Deliverable |
 |---|------|-------------|
-| M0 | 0.5h | Repo builds: `go vet`/`gofmt`/empty test green locally and in CI |
-| M1 | 1.5h | Go essentials pass (Tour of Go + Effective Go skim), then `Probe` interface + `Result` + monitor state machine **types** written as the learning vehicle |
-| M2 | 2.0h | All four probes implemented with table-driven tests (httptest + tempdir) |
-| M3 | 1.5h | Monitor loop + state machine complete with the full test table |
-| M4 | 1.0h | Telegram alerter + dry-run; end-to-end dry-run on the laptop against velma URLs (over Tailscale, just for the rehearsal) |
-| M5 | 1.5h | Deploy on velma via launchd, live-fire test, README with screenshot |
+| M0 | 0.5h | Repo builds; CI green on empty test |
+| M1 | 1.5h | Go essentials pass; `internal/config` (JSON schema + validation, table-driven tests) — config-driven from the start, no later refactor |
+| M2 | 2.0h | http/mcp/backup probes + tests (httptest, tempdir, test cert for expiry) |
+| M3 | 1.5h | Monitor loop + state machine + full test table |
+| M4 | 1.0h | Telegram alerter + dry-run; laptop dry-run against velma URLs |
+| M5 | 1.5h | Velma deploy (launchd) + live-fire + README — **v1 DONE, stands alone** |
+| M6 | 1.5h | Heartbeat pair (receiver + sender) + tests; internal config gains heartbeat_send |
+| M7 | 2.0h | DOKS: cluster, registry, manifests, CD pipeline, fleet config live |
+| M8 | 0.5h | Dead-man live-fire: stop velma sentinel → cloud alerts "velma is down" → restart → recovery. Screenshot → README |
 
 ## Definition of done
 
-- Public GitHub repo (`github.com/kbadinger/guardian-sentinel`), CI green,
-  staticcheck clean, `go test -race` passing.
-- Running on velma under launchd with KeepAlive; survived a reboot or a manual
-  `kickstart -k`.
-- Live-fire evidence in README (DOWN + RECOVERY screenshots).
-- README states plainly what it is, how it's configured, and shows the
-  architecture in ~10 lines — written for a hiring engineer skimming in 90s.
-- Guardian task `9c4f6f61` updated: done-criteria met, `actual_minutes` recorded.
-- THEN (separate follow-ups, not this build): resume/profile update via JobForge;
-  blog post task in the `[blog]` project.
+v1 (M5): public repo, CI green, running under launchd on velma, live-fire
+evidence in README. v2 (M8): fleet instance in production on DOKS deployed via
+CI/CD, all 7 sites monitored with real-content markers + cert warnings, dead-man
+proven both directions, README shows the architecture diagram + both live-fire
+screenshots, task `9c4f6f61` closed with actual_minutes. THEN (separate):
+JobForge resume/profile update with the new truthful claims; blog-post task in
+`[blog]` ("my uptime monitor watches my AI's brain — and they watch each other").
 
-## Open questions for Kevin 🔴
+## Non-goals
 
-1. **License** — MIT recommended for a portfolio repo; confirm before the repo
-   goes public.
-2. **Repo visibility timing** — public from first push, or public at M5? (Spec
-   assumed public early; either is fine, done-criteria just needs public at end.)
-3. **Live-fire window** — say when it's OK to bounce the web service for ~2 min.
-4. **K8s stretch** — want the `deploy/k8s/` + Dockerfile literacy add-on (~1h
-   extra), or keep v1 pure?
+No dashboard/UI in v1 (Telegram + logs; a dashboard can be cluster tenant #2
+later). No Prometheus/metrics endpoint, no LoadBalancer, no multi-cluster, no
+service mesh, no autoscaling (1 replica is correct for a prober), no probing FROM
+velma of public sites (that's the fleet instance's job), no restarting/healing of
+anything watched, no third-party Go modules, Guardian never on k8s.
+
+## 🔴 Open questions for Kevin
+
+1. **License** — MIT recommended; confirm before repo goes public.
+2. **Repo visibility timing** — public from first push, or at M5?
+3. **Live-fire windows** — OK to bounce guardian-web ~2 min (M5) and the velma
+   sentinel ~15 min (M8)?
+4. **DigitalOcean billing** — confirm the eRail DO account carries the $12/mo.
+5. **URLs to confirm** — ReadReceipt and eRail TrackTrace public URLs.
+6. ~~K8s stretch?~~ Superseded — Kubernetes is now core scope (Deployment B).
