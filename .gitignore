@@ -1,0 +1,24 @@
+# Secrets — never commit (house rule: gitignore before first add)
+.env
+.env.*
+*.env
+!deploy/guardian-sentinel.env.example
+.mcp.json
+.ticktick-token.json
+.token-oauth
+*token*.json
+*oauth*
+*.pem
+*.key
+credentials*.json
+service-account*.json
+
+# Build artifacts
+/bin/
+/dist/
+guardian-sentinel
+*.test
+
+# OS / editor
+.DS_Store
+*.log
