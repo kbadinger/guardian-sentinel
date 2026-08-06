@@ -1,0 +1,17 @@
+{
+  "instance": "winbox",
+  "interval": "60s",
+  "probe_timeout": "10s",
+  "fail_threshold": 3,
+  "realert_cooldown": "6h",
+  "probes": [
+    { "name": "net-speed", "type": "speedtest", "url": "https://speed.cloudflare.com/__down?bytes=100000000", "min_mbps": 100, "interval": "30m" },
+    { "name": "cpu-temp", "type": "exec", "interval": "5m", "warn_above": 90,
+      "cmd": ["powershell", "-NoProfile", "-Command", "((Get-CimInstance -Namespace root/wmi -ClassName MSAcpi_ThermalZoneTemperature | Select-Object -First 1).CurrentTemperature / 10) - 273.15"],
+      "parse": "([-\\d.]+)" },
+    { "name": "disk-c-free-gb", "type": "exec", "interval": "15m", "warn_below": 50,
+      "cmd": ["powershell", "-NoProfile", "-Command", "[math]::Round((Get-PSDrive C).Free / 1GB, 1)"],
+      "parse": "([\\d.]+)" },
+    { "name": "cloud-peer", "type": "heartbeat_send", "url": "http://DOKS_NODE_PUBLIC_IP:30080/heartbeat", "token_env": "SENTINEL_HEARTBEAT_TOKEN", "interval": "5m", "fail_threshold": 3 }
+  ]
+}

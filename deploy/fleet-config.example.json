@@ -12,6 +12,9 @@
     { "name": "readreceipt", "type": "http", "url": "https://CONFIRM_URL/", "expect": "VERIFY_MARKER", "warn_cert_days": 14 },
     { "name": "erail-tracktrace", "type": "http", "url": "https://CONFIRM_URL/", "expect": "VERIFY_MARKER", "warn_cert_days": 14 },
     { "name": "qtown-v1", "type": "http", "url": "https://v1.qtown.ai/", "expect": "VERIFY_MARKER", "warn_cert_days": 14 },
-    { "name": "velma-alive", "type": "heartbeat", "listen": ":8080", "token_env": "SENTINEL_HEARTBEAT_TOKEN", "max_silence": "15m", "peer_name": "velma (Guardian host)" }
+    { "name": "peers-alive", "type": "heartbeat", "listen": ":8080", "token_env": "SENTINEL_HEARTBEAT_TOKEN", "peers": [
+      { "name": "velma", "max_silence": "15m" },
+      { "name": "winbox", "max_silence": "15m" }
+    ] }
   ]
 }

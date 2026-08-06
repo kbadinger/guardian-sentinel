@@ -12,6 +12,8 @@ The two instances cover each other with a **dead-man's switch**: the on-prem
 instance heartbeats the cloud one, so "the whole box is down" — the one failure
 no on-box watcher can report — still pages my phone. All alerts via Telegram.
 
+![guardian-sentinel architecture](docs/architecture.svg)
+
 **Status: spec complete (v2), build not started.** The full build spec — probe
 types, config schema, state machine, testing, both deployments, milestones — is
 in [SPEC.md](SPEC.md).

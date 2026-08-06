@@ -11,14 +11,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-      - name: Build linux/amd64 static binary
-        run: CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o bin/guardian-sentinel ./cmd/guardian-sentinel
       - name: Build and push image
         run: |
-          echo "${{ secrets.DO_API_TOKEN }}" | docker login registry.digitalocean.com -u unused --password-stdin
+          # DO registry: the API token is BOTH username and password
+          echo "${{ secrets.DO_API_TOKEN }}" | docker login registry.digitalocean.com -u "${{ secrets.DO_API_TOKEN }}" --password-stdin
           docker build -t registry.digitalocean.com/${{ secrets.DO_REGISTRY }}/guardian-sentinel:${{ github.sha }} .
           docker push registry.digitalocean.com/${{ secrets.DO_REGISTRY }}/guardian-sentinel:${{ github.sha }}
       - name: Rolling update

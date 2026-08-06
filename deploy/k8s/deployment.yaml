@@ -23,6 +23,10 @@ spec:
             - secretRef: { name: sentinel-secrets }
           ports:
             - containerPort: 8080   # heartbeat receiver only
+          livenessProbe:            # catches hangs, not just crashes
+            httpGet: { path: /healthz, port: 8080 }
+            initialDelaySeconds: 5
+            periodSeconds: 30
           volumeMounts:
             - { name: config, mountPath: /etc/sentinel, readOnly: true }
           resources:

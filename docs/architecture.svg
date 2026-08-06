@@ -1,0 +1,207 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1160 760" width="1160" height="760" role="img" aria-label="guardian-sentinel architecture: one Go binary as agents on velma and a Windows box, plus a DigitalOcean Kubernetes fleet instance, covering each other with a dead-man's switch, alerting to Telegram">
+  <style>
+    .bg{fill:#0A0F16}
+    .zone{fill:#111927}
+    .chipd{fill:#0D1420;stroke:#223048;stroke-width:1}
+    .card{fill:#1B2436;stroke:#2E3B57;stroke-width:1}
+    .cardg{fill:#0F1E1A;stroke:#1E3B31;stroke-width:1}
+    .tech{fill:#0D1420;stroke:#223048;stroke-width:1}
+    .corner{stroke:#44557A;stroke-width:1.5;fill:none}
+    .ring{stroke:#182434;stroke-width:1;fill:none;stroke-dasharray:1 7;stroke-linecap:round}
+    .hair{stroke:#1B2637;stroke-width:1}
+    text{font-family:system-ui,-apple-system,'Segoe UI',sans-serif;fill:#EAF0F7}
+    .title{font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;font-size:26px;font-weight:700}
+    .sub{font-size:13px;fill:#93A1B8}
+    .eyebrow{font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;font-size:11px;font-weight:600;letter-spacing:1.2px;fill:#7E8DA6}
+    .lbl{font-size:13px;font-weight:600}
+    .mono{font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;font-size:11.5px;fill:#C7D2E4}
+    .tmono{font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;font-size:10.5px;fill:#7E8DA6}
+    .tag{font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;font-size:10px;letter-spacing:1px}
+    .muted{fill:#93A1B8}
+    .faint{fill:#667691}
+    .blue{fill:#6FB3FF}.green{fill:#4AE39B}.amber{fill:#F6BD5A}.red{fill:#F1707B}.slash{fill:#44557A}
+    .lnB{stroke:#6FB3FF;stroke-width:2;fill:none}
+    .lnG{stroke:#4AE39B;stroke-width:2;fill:none;stroke-linejoin:round}
+    .lnA{stroke:#F6BD5A;stroke-width:1.8;fill:none}
+    .lnP{stroke:#2E6B55;stroke-width:1.5;fill:none;stroke-dasharray:5 4}
+    .it{font-style:italic;font-size:12px}
+    @media (prefers-reduced-motion: reduce){ .pulse{display:none} }
+  </style>
+  <defs>
+    <filter id="glow" x="-30%" y="-150%" width="160%" height="400%">
+      <feGaussianBlur stdDeviation="2.6" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <marker id="aB" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#6FB3FF"/></marker>
+    <marker id="aG" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#4AE39B"/></marker>
+    <marker id="aA" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#F6BD5A"/></marker>
+    <marker id="aP" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#2E6B55"/></marker>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1160" height="760" rx="14"/>
+
+  <!-- Radar rings, centered on the receiver: something is watching -->
+  <circle class="ring" cx="890" cy="394" r="90"/>
+  <circle class="ring" cx="890" cy="394" r="150"/>
+  <circle class="ring" cx="890" cy="394" r="210"/>
+  <circle class="ring" cx="890" cy="394" r="270"/>
+
+  <!-- Title -->
+  <text class="title" x="40" y="58"><tspan class="green">$</tspan> guardian-sentinel</text>
+  <rect class="pulse" x="342" y="38" width="11" height="22" fill="#4AE39B">
+    <animate attributeName="opacity" values="1;1;0;0" keyTimes="0;0.5;0.5;1" dur="1.2s" repeatCount="indefinite"/>
+  </rect>
+  <text class="sub" x="40" y="84">One Go binary &#183; agents on every machine &#183; the cloud watches back</text>
+
+  <!-- Alert sink: Telegram -->
+  <rect class="zone" x="850" y="36" width="270" height="88" rx="6"/>
+  <path class="corner" d="M850,50 L850,36 L864,36 M1106,36 L1120,36 L1120,50 M1120,110 L1120,124 L1106,124 M864,124 L850,124 L850,110"/>
+  <text class="eyebrow" x="870" y="62"><tspan class="slash">//</tspan> ALERT CHANNEL</text>
+  <text class="lbl" x="870" y="86">Telegram &#8594; Kevin&#8217;s phone</text>
+  <text class="mono muted" x="870" y="106">Bot API &#183; Guardian&#8217;s existing bot</text>
+
+  <!-- Alert paths -->
+  <path class="lnA" d="M210,170 L210,110 L844,110" marker-end="url(#aA)"/>
+  <path class="lnA" d="M1000,170 L1000,130" marker-end="url(#aA)"/>
+  <text class="mono amber" x="520" y="102">DOWN / RECOVERY / WARN</text>
+
+  <!-- Zone A: velma -->
+  <rect class="zone" x="40" y="170" width="340" height="350" rx="6"/>
+  <path class="corner" d="M40,184 L40,170 L54,170 M366,170 L380,170 L380,184 M380,506 L380,520 L366,520 M54,520 L40,520 L40,506"/>
+  <text class="eyebrow" x="56" y="200"><tspan class="slash">//</tspan> ON-PREM &#183; MAC MINI &#8220;VELMA&#8221;</text>
+  <rect class="tech" x="56" y="214" width="73" height="20" rx="10"/>
+  <text class="tmono" x="64" y="228">Go stdlib</text>
+  <rect class="tech" x="137" y="214" width="60" height="20" rx="10"/>
+  <text class="tmono" x="145" y="228">launchd</text>
+  <rect class="tech" x="205" y="214" width="92" height="20" rx="10"/>
+  <text class="tmono" x="213" y="228">darwin/arm64</text>
+
+  <rect class="chipd" x="56" y="246" width="308" height="34" rx="6"/>
+  <text class="mono" x="70" y="267"><tspan class="green">$</tspan> sentinel --config internal.json</text>
+
+  <circle cx="62" cy="300" r="3" fill="#6FB3FF"/>
+  <text class="mono" x="76" y="304">API     127.0.0.1:8002/health</text>
+  <line class="hair" x1="56" y1="314" x2="364" y2="314"/>
+  <circle cx="62" cy="328" r="3" fill="#6FB3FF"/>
+  <text class="mono" x="76" y="332">Web     127.0.0.1:3100 &#183; marker check</text>
+  <line class="hair" x1="56" y1="342" x2="364" y2="342"/>
+  <circle cx="62" cy="356" r="3" fill="#6FB3FF"/>
+  <text class="mono" x="76" y="360">MCP     127.0.0.1:8765/mcp &#183; RPC init</text>
+  <line class="hair" x1="56" y1="370" x2="364" y2="370"/>
+  <circle cx="62" cy="384" r="3" fill="#6FB3FF"/>
+  <text class="mono" x="76" y="388">Backup  newest guardian.db.gz &lt; 26h</text>
+
+  <rect class="cardg" x="56" y="408" width="308" height="64" rx="8"/>
+  <circle cx="71" cy="428" r="3.5" fill="#4AE39B"/>
+  <text class="lbl green" x="84" y="433">Heartbeat sender</text>
+  <text class="mono muted" x="84" y="454">signed POST every 5m &#183; 3 fails &#8594; WARN</text>
+
+  <!-- Windows box: planned agent -->
+  <rect class="zone" x="40" y="548" width="340" height="168" rx="6"/>
+  <path class="corner" d="M40,562 L40,548 L54,548 M366,548 L380,548 L380,562 M380,702 L380,716 L366,716 M54,716 L40,716 L40,702"/>
+  <text class="eyebrow" x="56" y="578"><tspan class="slash">//</tspan> WINDOWS BOX</text>
+  <text class="tag amber" x="364" y="578" text-anchor="end">PLANNED &#183; v2.1</text>
+  <rect class="tech" x="56" y="592" width="30" height="20" rx="10"/>
+  <text class="tmono" x="64" y="606">Go</text>
+  <rect class="tech" x="92" y="592" width="104" height="20" rx="10"/>
+  <text class="tmono" x="100" y="606">Task Scheduler</text>
+  <rect class="tech" x="202" y="592" width="79" height="20" rx="10"/>
+  <text class="tmono" x="210" y="606">PowerShell</text>
+  <rect class="tech" x="287" y="592" width="73" height="20" rx="10"/>
+  <text class="tmono" x="295" y="606">win/amd64</text>
+  <circle cx="62" cy="626" r="3" fill="#6FB3FF"/>
+  <text class="mono" x="76" y="630">Uptime  boot notice + reboot detect</text>
+  <circle cx="62" cy="648" r="3" fill="#6FB3FF"/>
+  <text class="mono" x="76" y="652">Net     timed DL &#183; &lt; min Mbps &#8594; WARN</text>
+  <circle cx="62" cy="670" r="3" fill="#6FB3FF"/>
+  <text class="mono" x="76" y="674">Temp    CPU &#176;C via exec &#183; &gt; max &#8594; WARN</text>
+  <circle cx="62" cy="692" r="3" fill="#6FB3FF"/>
+  <text class="mono" x="76" y="696">Disk    free space &#183; &lt; min &#8594; WARN</text>
+
+  <!-- Zone B: DOKS -->
+  <rect class="zone" x="660" y="170" width="460" height="300" rx="6"/>
+  <path class="corner" d="M660,184 L660,170 L674,170 M1106,170 L1120,170 L1120,184 M1120,456 L1120,470 L1106,470 M674,470 L660,470 L660,456"/>
+  <text class="eyebrow" x="676" y="200"><tspan class="slash">//</tspan> CLOUD &#183; DIGITALOCEAN K8S (DOKS)</text>
+  <rect class="tech" x="676" y="214" width="85" height="20" rx="10"/>
+  <text class="tmono" x="684" y="228">Go &#183; scratch</text>
+  <rect class="tech" x="769" y="214" width="54" height="20" rx="10"/>
+  <text class="tmono" x="777" y="228">Docker</text>
+  <rect class="tech" x="831" y="214" width="85" height="20" rx="10"/>
+  <text class="tmono" x="839" y="228">DO Registry</text>
+  <rect class="tech" x="924" y="214" width="79" height="20" rx="10"/>
+  <text class="tmono" x="932" y="228">Kubernetes</text>
+  <rect class="tech" x="1011" y="214" width="79" height="20" rx="10"/>
+  <text class="tmono" x="1019" y="228">GH Actions</text>
+
+  <rect class="chipd" x="676" y="246" width="428" height="34" rx="6"/>
+  <text class="mono" x="690" y="267"><tspan class="green">$</tspan> sentinel --config fleet.json</text>
+  <text class="mono faint" x="1092" y="267" text-anchor="end">pod &#183; 50m &#183; 64Mi</text>
+
+  <circle cx="682" cy="302" r="3" fill="#6FB3FF"/>
+  <text class="lbl blue" x="696" y="306">Public-site probes &#215;7</text>
+  <text class="mono muted" x="696" y="326">HTTPS every 60s &#183; content marker &#183; cert &#8804; 14d &#8594; WARN</text>
+  <line class="hair" x1="676" y1="338" x2="1104" y2="338"/>
+
+  <rect class="cardg" x="676" y="350" width="428" height="96" rx="8"/>
+  <circle class="pulse" cx="691" cy="370" r="3.5" fill="#4AE39B">
+    <animate attributeName="opacity" values="1;0.35;1" dur="2s" repeatCount="indefinite"/>
+  </circle>
+  <circle cx="691" cy="370" r="3.5" fill="#4AE39B" opacity="0.55"/>
+  <text class="lbl green" x="704" y="375">Heartbeat receiver &#8212; dead-man&#8217;s switch</text>
+  <text class="mono" x="704" y="396">:8080 /heartbeat + /healthz &#183; NodePort 30080 &#183; HMAC</text>
+  <text class="mono red" x="704" y="417">per-peer silence &gt; 15m &#8594; &#8220;&lt;peer&gt; is down&#8221;</text>
+
+  <!-- Public sites -->
+  <rect class="zone" x="660" y="560" width="460" height="150" rx="6"/>
+  <path class="corner" d="M660,574 L660,560 L674,560 M1106,560 L1120,560 L1120,574 M1120,696 L1120,710 L1106,710 M674,710 L660,710 L660,696"/>
+  <text class="eyebrow" x="676" y="588"><tspan class="slash">//</tspan> PUBLIC SURFACES &#183; PROBED FROM THE INTERNET</text>
+
+  <rect class="card" x="676" y="602" width="134" height="26" rx="6"/>
+  <text class="mono" x="688" y="619">thisweekeats.com</text>
+  <rect class="card" x="820" y="602" width="128" height="26" rx="6"/>
+  <text class="mono" x="832" y="619">app.penforge.io</text>
+  <rect class="card" x="958" y="602" width="134" height="26" rx="6"/>
+  <text class="mono" x="970" y="619">driftnightly.com</text>
+
+  <rect class="card" x="676" y="636" width="141" height="26" rx="6"/>
+  <text class="mono" x="688" y="653">kevinbadinger.com</text>
+  <rect class="card" x="827" y="636" width="107" height="26" rx="6"/>
+  <text class="mono" x="839" y="653">v1.qtown.ai</text>
+  <rect class="card" x="944" y="636" width="114" height="26" rx="6"/>
+  <text class="mono" x="956" y="653">readreceipt *</text>
+
+  <rect class="card" x="676" y="670" width="148" height="26" rx="6"/>
+  <text class="mono" x="688" y="687">eRail TrackTrace *</text>
+  <text class="mono faint" x="840" y="687">* URL confirmed at build time</text>
+
+  <!-- Probe flow -->
+  <path class="lnB" d="M890,470 L890,554" marker-end="url(#aB)"/>
+  <text class="mono blue" x="902" y="516">HTTPS probes</text>
+
+  <!-- Heartbeat flow: velma, drawn as the pulse it is -->
+  <path id="hb" class="lnG" filter="url(#glow)"
+    d="M380,440 L436,440 l3,-5 l3,5 l6,0 l2,5 l3,-26 l3,34 l2,-13 l8,0 l4,-7 l4,7 L510,440 L540,440 L540,396 L654,396" marker-end="url(#aG)"/>
+  <circle class="pulse" r="3" fill="#4AE39B">
+    <animateMotion dur="3.5s" repeatCount="indefinite"><mpath href="#hb"/></animateMotion>
+  </circle>
+  <text class="mono green" x="392" y="466">signed POST /heartbeat &#183; every 5m</text>
+
+  <!-- Heartbeat flow: windows box (planned) -->
+  <path class="lnP" d="M380,652 L630,652 L630,410 L654,410" marker-end="url(#aP)"/>
+  <text class="mono faint" x="392" y="644">+ agent N &#8212; same binary + config</text>
+
+  <!-- Thesis -->
+  <text class="it muted" x="520" y="504" text-anchor="middle">&#8220;velma is down&#8221; &#8212; the one failure</text>
+  <text class="it muted" x="520" y="522" text-anchor="middle">no on-box watcher can report</text>
+
+  <!-- Legend + stance -->
+  <line x1="40" y1="730" x2="70" y2="730" class="lnB"/>
+  <text class="mono muted" x="78" y="734">outbound probes</text>
+  <line x1="205" y1="730" x2="235" y2="730" class="lnG"/>
+  <text class="mono muted" x="243" y="734">heartbeat &#183; dead-man</text>
+  <line x1="405" y1="730" x2="435" y2="730" class="lnA"/>
+  <text class="mono muted" x="443" y="734">alerts</text>
+  <line x1="510" y1="730" x2="540" y2="730" class="lnP"/>
+  <text class="mono muted" x="548" y="734">planned / growth</text>
+  <text class="mono faint" x="1120" y="734" text-anchor="end">read-only &#183; one binary, config-driven &#183; Go stdlib &#183; SPEC v2.1</text>
+</svg>
