@@ -1,0 +1,76 @@
+# Continuous deploy: every push to main that passes CI is built, pushed to the
+# DigitalOcean registry and rolled out to the cluster as a rolling update.
+#
+# One repo secret: DIGITALOCEAN_ACCESS_TOKEN, a narrow DigitalOcean token
+# (kubernetes read + cluster access, registry read/write/delete).
+# Cluster credentials are short-lived (10 min) and minted per run by doctl;
+# no kubeconfig is stored anywhere.
+name: deploy
+
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: registry.digitalocean.com/kbadinger-sentinel
+  CLUSTER: guardian-sentinel
+  DOCTL_VERSION: 1.186.0
+  DOCTL_SHA256: a36f2ae5e672160c3a20ab46e8cef79c9b24e8055417f4beb790a897c532d241
+  KUBECTL_VERSION: v1.36.5
+  KUBECTL_SHA256: 33bc88a24c3b09cf55bfd59e6ca977881b61fc3f25ab65bc80c65b430248648e
+  KEEP_IMAGES: 5
+
+jobs:
+  build-push-rollout:
+    # Only deploy commits that passed CI (or a manual run).
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    env:
+      DIGITALOCEAN_ACCESS_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+      SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SHA }}
+
+      - name: Install pinned doctl and kubectl (checksums verified)
+        run: |
+          curl -sSLo doctl.tgz "https://github.com/digitalocean/doctl/releases/download/v${DOCTL_VERSION}/doctl-${DOCTL_VERSION}-linux-amd64.tar.gz"
+          echo "${DOCTL_SHA256}  doctl.tgz" | sha256sum -c -
+          tar xzf doctl.tgz && sudo install -m 755 doctl /usr/local/bin/doctl
+          curl -sSLo kubectl "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          echo "${KUBECTL_SHA256}  kubectl" | sha256sum -c -
+          sudo install -m 755 kubectl /usr/local/bin/kubectl
+
+      - name: Build and push the image
+        run: |
+          TAG="${SHA::7}"
+          echo "TAG=${TAG}" >> "$GITHUB_ENV"
+          doctl registry login --expiry-seconds 600
+          docker build --platform linux/amd64 -t "${REGISTRY}/guardian-sentinel:${TAG}" .
+          docker push "${REGISTRY}/guardian-sentinel:${TAG}"
+
+      - name: Rolling update
+        run: |
+          doctl kubernetes cluster kubeconfig save "${CLUSTER}" --expiry-seconds 600
+          kubectl set image deployment/guardian-sentinel "sentinel=${REGISTRY}/guardian-sentinel:${TAG}"
+          kubectl rollout status deployment/guardian-sentinel --timeout=180s
+
+      - name: Keep only the newest images (free registry tier is 500 MiB)
+        run: |
+          OLD=$(doctl registry repository list-tags guardian-sentinel --format Tag,UpdatedAt --no-header \
+            | sort -k2 -r | awk -v keep="${KEEP_IMAGES}" 'NR>keep {print $1}')
+          if [ -n "${OLD}" ]; then
+            doctl registry repository delete-tag guardian-sentinel ${OLD} --force
+            doctl registry garbage-collection start --include-untagged-manifests --force
+          fi
