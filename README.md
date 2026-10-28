@@ -14,7 +14,7 @@ no on-box watcher can report — still pages my phone. All alerts via Telegram.
 
 ![guardian-sentinel architecture](docs/architecture.svg)
 
-**Status:** the cloud (fleet) instance is built and tested: HTTP content checks, cert-expiry warnings, the alert state machine, Telegram alerts, and the signed heartbeat receiver with a `/healthz` that fails when the monitor loop stalls. Kubernetes deploy in progress. The on-box instance and the Windows agent come next. The full build spec is in [SPEC.md](SPEC.md).
+**Status:** the cloud (fleet) instance is built and tested: HTTP content checks, cert-expiry warnings, the alert state machine, Telegram alerts, and the signed heartbeat receiver with a `/healthz` that fails when the monitor loop stalls. It runs in production on a 1-node DigitalOcean Kubernetes cluster: every push to main that passes CI is built, pushed to the registry and rolled out as a rolling update, and Kubernetes restarts the watchdog if it crashes or its loop stalls. The on-box instance and the Windows agent come next. The full build spec is in [SPEC.md](SPEC.md).
 
 - Go stdlib only, zero third-party dependencies; single static binary
 - Config-driven probes (JSON): same binary, different config per deployment
