@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,7 +16,7 @@ func env(vars map[string]string) func(string) string {
 
 const testToken = "test-heartbeat-secret-value"
 
-var testEnv = env(map[string]string{"SENTINEL_HEARTBEAT_TOKEN": testToken})
+var testEnv = env(map[string]string{"SENTINEL_HEARTBEAT_TOKEN": testToken, "ANTHROPIC_ADMIN_KEY": "a", "VERCEL_TOKEN": "v"})
 
 func TestExampleConfigIsValid(t *testing.T) {
 	c, err := Load(filepath.Join("..", "..", "deploy", "fleet-config.example.json"), testEnv)
@@ -228,5 +229,41 @@ func TestHeartbeatWithNoPeersIsValid(t *testing.T) {
 	}
 	if len(c.Probes[0].Peers) != 0 {
 		t.Errorf("peers = %v, want none", c.Probes[0].Peers)
+	}
+}
+
+func TestSpendBlock(t *testing.T) {
+	base := `{"instance":"fleet","probes":[{"name":"site","type":"http","url":"https://example.com/","expect":"Example"}],"spend":%s}`
+	vars := env(map[string]string{"ANTHROPIC_ADMIN_KEY": "a-key", "VERCEL_TOKEN": "v-key"})
+
+	c, err := Parse([]byte(fmt.Sprintf(base, `{"report_at":"08:30","untracked":["OpenAI"],"providers":[
+		{"name":"Anthropic API","type":"anthropic","key_env":"ANTHROPIC_ADMIN_KEY"},
+		{"name":"Vercel","type":"vercel","key_env":"VERCEL_TOKEN","team_id":"team_1"}]}`)), vars)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Spend.Hour != 8 || c.Spend.Minute != 30 {
+		t.Errorf("report_at parsed as %d:%d", c.Spend.Hour, c.Spend.Minute)
+	}
+	if c.Spend.Providers[0].Key != "a-key" || c.Spend.Providers[1].Key != "v-key" {
+		t.Error("keys were not resolved from the environment")
+	}
+
+	bad := []struct{ spend, want string }{
+		{`{"report_at":"8am","providers":[{"name":"A","type":"anthropic","key_env":"ANTHROPIC_ADMIN_KEY"}]}`, "report_at"},
+		{`{"report_at":"08:00","providers":[]}`, "at least one provider"},
+		{`{"report_at":"08:00","providers":[{"name":"V","type":"vercel","key_env":"VERCEL_TOKEN"}]}`, "team_id is required"},
+		{`{"report_at":"08:00","providers":[{"name":"X","type":"openai","key_env":"VERCEL_TOKEN"}]}`, "unknown type"},
+		{`{"report_at":"08:00","providers":[{"name":"A","type":"anthropic","key_env":"MISSING_KEY"}]}`, "MISSING_KEY (key_env) is not set"},
+		{`{"report_at":"08:00","providers":[{"name":"A","type":"anthropic","key_env":"sk-ant-admin01-pasted"}]}`, "not a value"},
+	}
+	for _, b := range bad {
+		_, err := Parse([]byte(fmt.Sprintf(base, b.spend)), vars)
+		if err == nil || !strings.Contains(err.Error(), b.want) {
+			t.Errorf("spend %s: err = %v, want %q", b.spend, err, b.want)
+		}
+		if err != nil && strings.Contains(err.Error(), "pasted") {
+			t.Error("an error echoed a value pasted into key_env")
+		}
 	}
 }

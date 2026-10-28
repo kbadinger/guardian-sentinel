@@ -41,6 +41,37 @@ type Config struct {
 	FailThreshold   int      `json:"fail_threshold"`
 	RealertCooldown Duration `json:"realert_cooldown"`
 	Probes          []Probe  `json:"probes"`
+	Spend           *Spend   `json:"spend"` // optional daily spend report
+}
+
+// Spend provider types.
+const (
+	SpendAnthropic = "anthropic"
+	SpendVercel    = "vercel"
+)
+
+// Spend is the optional daily spend report: once a day, at ReportAt
+// (America/New_York), one message with each provider's spend. It only
+// reads; it never changes anything at a provider.
+type Spend struct {
+	ReportAt  string          `json:"report_at"` // "HH:MM", 24-hour, America/New_York
+	Providers []SpendProvider `json:"providers"`
+	Untracked []string        `json:"untracked"` // providers paid for but not read yet; listed in the report
+
+	// Hour and Minute are ReportAt parsed.
+	Hour   int `json:"-"`
+	Minute int `json:"-"`
+}
+
+// SpendProvider is one billing source the report reads.
+type SpendProvider struct {
+	Name   string `json:"name"`    // shown in the report, e.g. "Anthropic API"
+	Type   string `json:"type"`    // anthropic | vercel
+	KeyEnv string `json:"key_env"` // NAME of the env var holding the read key
+	TeamID string `json:"team_id"` // vercel: the team whose charges are read
+
+	// Key is the secret read from KeyEnv. It is never part of the JSON.
+	Key string `json:"-"`
 }
 
 // Probe is one entry in "probes". Which fields apply depends on Type.
@@ -169,7 +200,48 @@ func (c *Config) validate(getenv func(string) string) error {
 		}
 		errs = append(errs, validateProbe(label, p, getenv)...)
 	}
+	if c.Spend != nil {
+		errs = append(errs, validateSpend(c.Spend, getenv)...)
+	}
 	return errors.Join(errs...)
+}
+
+func validateSpend(s *Spend, getenv func(string) string) []error {
+	var errs []error
+	add := func(format string, args ...any) {
+		errs = append(errs, fmt.Errorf("spend: "+format, args...))
+	}
+	if at, err := time.Parse("15:04", s.ReportAt); err != nil {
+		add("report_at must be a 24-hour time like \"08:00\"")
+	} else {
+		s.Hour, s.Minute = at.Hour(), at.Minute()
+	}
+	if len(s.Providers) == 0 {
+		add("at least one provider is required")
+	}
+	for i := range s.Providers {
+		p := &s.Providers[i]
+		label := p.Name
+		if label == "" {
+			label = fmt.Sprintf("#%d", i+1)
+			add("provider %s: name is required", label)
+		}
+		switch p.Type {
+		case SpendAnthropic:
+		case SpendVercel:
+			if p.TeamID == "" {
+				add("provider %s: team_id is required for vercel", label)
+			}
+		default:
+			add("provider %s: unknown type %q (supported: %s, %s)", label, p.Type, SpendAnthropic, SpendVercel)
+		}
+		if key, err := resolveSecretField("key_env", p.KeyEnv, getenv); err != nil {
+			add("provider %s: %v", label, err)
+		} else {
+			p.Key = key
+		}
+	}
+	return errs
 }
 
 func validateProbe(label string, p *Probe, getenv func(string) string) []error {
@@ -228,15 +300,20 @@ func validateProbe(label string, p *Probe, getenv func(string) string) []error {
 // but never print a value. If envName does not look like a variable name it
 // is not echoed either: someone may have pasted the secret itself there.
 func resolveSecret(envName string, getenv func(string) string) (string, error) {
+	return resolveSecretField("token_env", envName, getenv)
+}
+
+// resolveSecretField is resolveSecret for a config field with another name.
+func resolveSecretField(field, envName string, getenv func(string) string) (string, error) {
 	if envName == "" {
-		return "", errors.New("token_env is required (the NAME of the environment variable holding the secret)")
+		return "", fmt.Errorf("%s is required (the NAME of the environment variable holding the secret)", field)
 	}
 	if !isEnvName(envName) {
-		return "", errors.New("token_env must be an environment variable NAME (letters, digits, underscore), not a value")
+		return "", fmt.Errorf("%s must be an environment variable NAME (letters, digits, underscore), not a value", field)
 	}
 	value := getenv(envName)
 	if value == "" {
-		return "", fmt.Errorf("environment variable %s (token_env) is not set", envName)
+		return "", fmt.Errorf("environment variable %s (%s) is not set", envName, field)
 	}
 	return value, nil
 }

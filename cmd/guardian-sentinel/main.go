@@ -20,6 +20,7 @@ import (
 	"github.com/kbadinger/guardian-sentinel/internal/config"
 	"github.com/kbadinger/guardian-sentinel/internal/monitor"
 	"github.com/kbadinger/guardian-sentinel/internal/probe"
+	"github.com/kbadinger/guardian-sentinel/internal/spend"
 )
 
 // shutdownTimeout bounds the drain on SIGTERM. Kubernetes waits 30s by
@@ -61,6 +62,19 @@ func run() error {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
 	defer stop()
+
+	var reporter *spend.Reporter
+	if cfg.Spend != nil {
+		reporter = newSpendReporter(cfg, ny, sender)
+	}
+	// SENTINEL_SPEND_ONCE=1 sends one spend report now and exits: a manual
+	// check that the keys and the message work.
+	if os.Getenv("SENTINEL_SPEND_ONCE") == "1" {
+		if reporter == nil {
+			return errors.New("SENTINEL_SPEND_ONCE is set but the config has no spend block")
+		}
+		return reporter.SendOnce(ctx)
+	}
 
 	// The heartbeat receiver reports accepted heartbeats to the runner, and
 	// the runner polls the receiver's peers, so the runner is created after
@@ -127,7 +141,14 @@ func run() error {
 	}
 
 	log.Printf("sentinel[%s] starting: %d checks every %s", cfg.Instance, len(checks), cfg.Interval.Duration)
+	reportDone := make(chan struct{})
+	if reporter != nil {
+		go func() { defer close(reportDone); reporter.Run(ctx) }()
+	} else {
+		close(reportDone)
+	}
 	runner.Run(ctx) // returns on SIGTERM / Ctrl-C
+	<-reportDone
 
 	// Stop taking heartbeats first, then let alerts already due go out.
 	log.Printf("shutting down")
@@ -140,6 +161,24 @@ func run() error {
 	}
 	runner.Wait()
 	return nil
+}
+
+// newSpendReporter wires the config's spend providers to their readers.
+func newSpendReporter(cfg *config.Config, loc *time.Location, sender monitor.Sender) *spend.Reporter {
+	r := &spend.Reporter{
+		Instance: cfg.Instance, Hour: cfg.Spend.Hour, Minute: cfg.Spend.Minute,
+		Location: loc, Sender: sender, Untracked: cfg.Spend.Untracked,
+	}
+	client := &http.Client{Timeout: time.Minute}
+	for _, p := range cfg.Spend.Providers {
+		switch p.Type {
+		case config.SpendAnthropic:
+			r.Sources = append(r.Sources, &spend.Anthropic{Label: p.Name, Key: p.Key, Client: client})
+		case config.SpendVercel:
+			r.Sources = append(r.Sources, &spend.Vercel{Label: p.Name, Key: p.Key, TeamID: p.TeamID, Client: client})
+		}
+	}
+	return r
 }
 
 // listener is a bound port waiting to serve a heartbeat receiver.

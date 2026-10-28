@@ -5,10 +5,51 @@
   "fail_threshold": 3,
   "realert_cooldown": "6h",
   "probes": [
-    { "name": "my-site", "type": "http", "url": "https://www.example.com/", "expect": "<title>Example Domain", "warn_cert_days": 14 },
-    { "name": "my-app-login", "type": "http", "url": "https://app.example.com/login", "expect": "<title>My App", "warn_cert_days": 14 },
-    { "name": "peers-alive", "type": "heartbeat", "listen": ":8080", "token_env": "SENTINEL_HEARTBEAT_TOKEN", "peers": [
-      { "name": "home-server", "max_silence": "15m" }
-    ] }
-  ]
+    {
+      "name": "my-site",
+      "type": "http",
+      "url": "https://www.example.com/",
+      "expect": "<title>Example Domain",
+      "warn_cert_days": 14
+    },
+    {
+      "name": "my-app-login",
+      "type": "http",
+      "url": "https://app.example.com/login",
+      "expect": "<title>My App",
+      "warn_cert_days": 14
+    },
+    {
+      "name": "peers-alive",
+      "type": "heartbeat",
+      "listen": ":8080",
+      "token_env": "SENTINEL_HEARTBEAT_TOKEN",
+      "peers": [
+        {
+          "name": "home-server",
+          "max_silence": "15m"
+        }
+      ]
+    }
+  ],
+  "spend": {
+    "report_at": "08:00",
+    "untracked": [
+      "OpenAI",
+      "OpenRouter"
+    ],
+    "providers": [
+      {
+        "name": "Anthropic API",
+        "type": "anthropic",
+        "key_env": "ANTHROPIC_ADMIN_KEY"
+      },
+      {
+        "name": "Vercel",
+        "type": "vercel",
+        "key_env": "VERCEL_TOKEN",
+        "team_id": "team_REPLACE_ME"
+      }
+    ]
+  }
 }

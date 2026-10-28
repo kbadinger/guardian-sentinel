@@ -19,3 +19,16 @@ no on-box watcher can report — still pages my phone. All alerts via Telegram.
 - Go stdlib only, zero third-party dependencies; single static binary
 - Config-driven probes (JSON): same binary, different config per deployment
 - Read-only by design: it observes, it never touches what it watches
+
+## Daily spend report (optional)
+
+Add a `spend` block to the config and the instance sends one Telegram message a
+day at `report_at` (America/New_York): yesterday's spend and the month to date
+for each billing provider, biggest first, with the model or service that cost
+the most. It only reads billing data; it never changes a limit or pauses
+anything. Supported now: the Anthropic API cost report (needs an Admin API key)
+and Vercel billing charges (a token whose role can read billing). Keys come
+from the environment variables named in `key_env`, never from the config file.
+`untracked` lists providers you pay for that aren't read yet, so the report
+says so. `SENTINEL_SPEND_ONCE=1` sends one report now and exits (add
+`SENTINEL_DRY_RUN=1` to print it). See `deploy/fleet-config.example.json`.
