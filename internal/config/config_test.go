@@ -122,7 +122,6 @@ func TestInvalidConfigs(t *testing.T) {
 		{"heartbeat bad listen", wrap(`{"name": "hb", "type": "heartbeat", "listen": "8080", "token_env": "SENTINEL_HEARTBEAT_TOKEN", "peers": [` + peer + `]}`), "listen must be"},
 		{"heartbeat missing token_env", wrap(heartbeat("", peer)), "token_env is required"},
 		{"heartbeat env var not set", wrap(heartbeat("SOME_UNSET_VAR", peer)), "SOME_UNSET_VAR (token_env) is not set"},
-		{"heartbeat no peers", wrap(heartbeat("SENTINEL_HEARTBEAT_TOKEN", "")), "at least one peer"},
 		{"heartbeat peer missing name", wrap(heartbeat("SENTINEL_HEARTBEAT_TOKEN", `{"max_silence": "15m"}`)), "peer #1: name is required"},
 		{"heartbeat peer missing max_silence", wrap(heartbeat("SENTINEL_HEARTBEAT_TOKEN", `{"name": "home-server"}`)), "max_silence is required"},
 		{"peer name clashes with probe", wrap(site + "," + heartbeat("SENTINEL_HEARTBEAT_TOKEN", `{"name": "site", "max_silence": "15m"}`)), `duplicate name "site"`},
@@ -216,5 +215,18 @@ func TestIsEnvName(t *testing.T) {
 		if got := isEnvName(tt.in); got != tt.want {
 			t.Errorf("isEnvName(%q) = %v, want %v", tt.in, got, tt.want)
 		}
+	}
+}
+
+// A receiver with no peers yet still serves /healthz for the Kubernetes
+// liveness probe; peers are added as each on-box instance starts sending.
+func TestHeartbeatWithNoPeersIsValid(t *testing.T) {
+	data := `{"instance": "fleet", "probes": [{"name": "hb", "type": "heartbeat", "listen": ":8080", "token_env": "SENTINEL_HEARTBEAT_TOKEN", "peers": []}]}`
+	c, err := Parse([]byte(data), testEnv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.Probes[0].Peers) != 0 {
+		t.Errorf("peers = %v, want none", c.Probes[0].Peers)
 	}
 }

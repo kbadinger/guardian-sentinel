@@ -207,9 +207,6 @@ func validateProbe(label string, p *Probe, getenv func(string) string) []error {
 		} else {
 			p.Token = token
 		}
-		if len(p.Peers) == 0 {
-			add("at least one peer is required")
-		}
 		for j, peer := range p.Peers {
 			if peer.Name == "" {
 				add("peer #%d: name is required", j+1)
