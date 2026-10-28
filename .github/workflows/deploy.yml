@@ -39,7 +39,7 @@ jobs:
       DIGITALOCEAN_ACCESS_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
       SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ env.SHA }}
 
@@ -68,8 +68,10 @@ jobs:
 
       - name: Keep only the newest images (free registry tier is 500 MiB)
         run: |
-          OLD=$(doctl registry repository list-tags guardian-sentinel --format Tag,UpdatedAt --no-header \
-            | sort -k2 -r | awk -v keep="${KEEP_IMAGES}" 'NR>keep {print $1}')
+          # Tagged images only, newest first; untagged manifests go in garbage collection.
+          OLD=$(doctl registry repository list-tags guardian-sentinel -o json \
+            | jq -r --argjson keep "${KEEP_IMAGES}" \
+              '[.[] | select(.tag != null and .tag != "")] | sort_by(.updated_at) | reverse | .[$keep:] | .[].tag')
           if [ -n "${OLD}" ]; then
             doctl registry repository delete-tag guardian-sentinel ${OLD} --force
             doctl registry garbage-collection start --include-untagged-manifests --force
