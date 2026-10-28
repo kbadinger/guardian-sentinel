@@ -16,9 +16,39 @@ service-account*.json
 # Build artifacts
 /bin/
 /dist/
-guardian-sentinel
+/guardian-sentinel
 *.test
 
 # OS / editor
 .DS_Store
 *.log
+
+# --- credentials: never commit these (gitpurge) ---
+.mcp.json
+.ticktick-token.json
+.token-oauth
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+*.pem
+*.p12
+*.pfx
+*.keystore
+*.jks
+id_rsa
+id_ed25519
+*_rsa
+credentials*.json
+service-account*.json
+*adminsdk*.json
+
+# Real watch lists stay local; only *.example.json is committed
+deploy/fleet-config.json
+deploy/internal-config.json
+deploy/windows-config.json
+deploy/k8s/secret.yaml
+
+# Working notes stay private (customer + account details)
+tasks/

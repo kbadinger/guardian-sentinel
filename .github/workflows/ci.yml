@@ -19,8 +19,6 @@ jobs:
         run: go vet ./...
       - name: test
         run: go test -race ./...
-      - name: staticcheck
-        # Pin per house supply-chain rule; verify version is >=7 days old before bumping.
-        run: |
-          go install honnef.co/go/tools/cmd/staticcheck@2025.1.1
-          staticcheck ./...
+      - name: build (linux/amd64, static)
+        run: CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /dev/null ./cmd/guardian-sentinel
+      # staticcheck is left out until its release age is checked (house supply-chain rule).

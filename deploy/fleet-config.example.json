@@ -5,16 +5,10 @@
   "fail_threshold": 3,
   "realert_cooldown": "6h",
   "probes": [
-    { "name": "thisweekeats", "type": "http", "url": "https://thisweekeats.com/", "expect": "VERIFY_MARKER", "warn_cert_days": 14 },
-    { "name": "penforge", "type": "http", "url": "https://app.penforge.io/", "expect": "VERIFY_MARKER", "warn_cert_days": 14 },
-    { "name": "drift", "type": "http", "url": "https://driftnightly.com/", "expect": "VERIFY_MARKER", "warn_cert_days": 14 },
-    { "name": "kevinbadinger", "type": "http", "url": "https://kevinbadinger.com/", "expect": "VERIFY_MARKER", "warn_cert_days": 14 },
-    { "name": "readreceipt", "type": "http", "url": "https://CONFIRM_URL/", "expect": "VERIFY_MARKER", "warn_cert_days": 14 },
-    { "name": "erail-tracktrace", "type": "http", "url": "https://CONFIRM_URL/", "expect": "VERIFY_MARKER", "warn_cert_days": 14 },
-    { "name": "qtown-v1", "type": "http", "url": "https://v1.qtown.ai/", "expect": "VERIFY_MARKER", "warn_cert_days": 14 },
+    { "name": "my-site", "type": "http", "url": "https://www.example.com/", "expect": "<title>Example Domain", "warn_cert_days": 14 },
+    { "name": "my-app-login", "type": "http", "url": "https://app.example.com/login", "expect": "<title>My App", "warn_cert_days": 14 },
     { "name": "peers-alive", "type": "heartbeat", "listen": ":8080", "token_env": "SENTINEL_HEARTBEAT_TOKEN", "peers": [
-      { "name": "velma", "max_silence": "15m" },
-      { "name": "winbox", "max_silence": "15m" }
+      { "name": "home-server", "max_silence": "15m" }
     ] }
   ]
 }

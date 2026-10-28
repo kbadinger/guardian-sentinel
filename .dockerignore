@@ -1,0 +1,19 @@
+# Keep secrets, git history and the real watch lists out of the build context
+.git
+.github
+.env
+.env.*
+*.env
+deploy/fleet-config.json
+deploy/internal-config.json
+deploy/windows-config.json
+deploy/k8s/secret.yaml
+*.pem
+*.key
+.mcp.json
+.ticktick-token.json
+.token-oauth
+bin/
+dist/
+tasks/
+docs/
